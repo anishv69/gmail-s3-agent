@@ -34,6 +34,9 @@ jobs:
       - name: Run ESLint
         run: npm run lint --if-present
 
+      - name: Generate Next.js Types
+        run: npx next typegen
+
       - name: TypeScript Check
         run: npx tsc --noEmit
 
@@ -41,4 +44,3 @@ jobs:
         run: npm run build
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/testdb
-
