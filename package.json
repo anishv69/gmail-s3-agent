@@ -6,19 +6,37 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "demo:test": "node --env-file=.env scripts/demo-email-sender.mjs --test",
+    "demo:run": "node --env-file=.env scripts/demo-email-sender.mjs --run",
+    "demo:stop": "node scripts/demo-email-sender.mjs --stop",
+    "postinstall": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1152.0",
+    "@prisma/client": "^6.19.3",
+    "entities": "^8.1.0",
+    "googleapis": "^186.0.0",
+    "lucide-react": "^1.59.0",
     "next": "16.4.2",
+    "pg": "^8.23.1",
+    "prisma": "^6.19.3",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "sanitize-html": "^2.18.1"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/sanitize-html": "^2.16.2",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5"
   }
 }

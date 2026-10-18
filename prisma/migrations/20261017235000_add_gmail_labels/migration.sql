@@ -1,0 +1,2 @@
+ALTER TABLE "Email"
+ADD COLUMN "gmailLabels" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

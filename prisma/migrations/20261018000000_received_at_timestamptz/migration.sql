@@ -1,0 +1,3 @@
+ALTER TABLE "Email"
+ALTER COLUMN "receivedAt" TYPE TIMESTAMPTZ(3)
+USING "receivedAt" AT TIME ZONE 'UTC';

@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Email {
+  id             String       @id @default(cuid())
+  gmailMessageId String       @unique
+  gmailThreadId  String
+  sender         String
+  recipients     String
+  subject        String
+  snippet        String       @db.Text
+  bodyText       String       @db.Text
+  bodyHtml       String?      @db.Text
+  gmailLabels    String[]     @default([])
+  receivedAt     DateTime     @db.Timestamptz(3)
+  createdAt      DateTime     @default(now())
+  attachments    Attachment[]
+
+  @@index([receivedAt])
+}
+
+model Attachment {
+  id                String   @id @default(cuid())
+  emailId           String
+  gmailAttachmentId String
+  fileName          String
+  mimeType          String
+  size              Int
+  s3Key             String
+  createdAt         DateTime @default(now())
+  email             Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  @@unique([emailId, gmailAttachmentId])
+  @@index([emailId])
+}
+
+model SyncState {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
