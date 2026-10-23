@@ -26,6 +26,7 @@ export default function AutoRepliesPage() {
   const [editText, setEditText] = useState("");
   const [sendingAll, setSendingAll] = useState(false);
   const [generatingBatch, setGeneratingBatch] = useState(false);
+  const [displayCount, setDisplayCount] = useState(20);
 
   useEffect(() => {
     loadReplies();
@@ -165,6 +166,13 @@ export default function AutoRepliesPage() {
         <h1 className="text-3xl font-bold">Auto-Replies</h1>
         <div className="flex gap-3">
           <button
+            onClick={sendAllPending}
+            disabled={sendingAll || filtered.filter(r => r.status === 'pending_send').length === 0}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {sendingAll ? "Sending..." : `Send All Pending (${filtered.filter(r => r.status === 'pending_send').length})`}
+          </button>
+          <button
             onClick={generateBatchReplies}
             disabled={generatingBatch}
             className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -178,24 +186,32 @@ export default function AutoRepliesPage() {
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex gap-2 mb-6">
-        {["all", "draft", "pending_send", "sent"].map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setFilter(tab as any)}
-            className={`px-4 py-2 rounded-lg font-medium transition ${
-              filter === tab
-                ? "bg-blue-600 text-white"
-                : "bg-slate-200 text-slate-700 hover:bg-slate-300"
-            }`}
-          >
-            {tab === "all"
-              ? "All"
-              : tab === "pending_send"
-              ? "Pending"
-              : tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
+      <div className="flex gap-2 mb-6 items-center justify-between">
+        <div className="flex gap-2">
+          {["all", "draft", "pending_send", "sent"].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => {
+                setFilter(tab as any);
+                setDisplayCount(20); // Reset display count when filtering
+              }}
+              className={`px-4 py-2 rounded-lg font-medium transition ${
+                filter === tab
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+              }`}
+            >
+              {tab === "all"
+                ? "All"
+                : tab === "pending_send"
+                ? "Pending"
+                : tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
+        <div className="text-sm text-slate-600 font-medium">
+          Showing {Math.min(displayCount, filtered.length)} of {filtered.length}
+        </div>
       </div>
 
       {/* Replies List */}
@@ -206,7 +222,7 @@ export default function AutoRepliesPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {filtered.map((reply) => (
+          {filtered.slice(0, displayCount).map((reply) => (
             <div key={reply.id} className="bg-white rounded-lg border border-slate-200 p-5">
               {/* Header Row */}
               <div className="flex justify-between items-start gap-4 mb-4">
@@ -304,6 +320,30 @@ export default function AutoRepliesPage() {
               ) : null}
             </div>
           ))}
+          
+          {/* Load More Button */}
+          {displayCount < filtered.length && (
+            <div className="flex justify-center pt-4">
+              <button
+                onClick={() => setDisplayCount(displayCount + 20)}
+                className="px-6 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 font-medium text-sm"
+              >
+                Load More ({filtered.length - displayCount} remaining)
+              </button>
+            </div>
+          )}
+          
+          {/* Show All Button */}
+          {displayCount < filtered.length && (
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={() => setDisplayCount(filtered.length)}
+                className="px-6 py-2 text-slate-600 text-sm hover:underline"
+              >
+                Show All
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
