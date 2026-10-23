@@ -100,7 +100,7 @@ export default function AutoRepliesPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="max-w-4xl mx-auto p-6 pr-24">
       <div className="mb-6 flex items-center gap-4">
         <Link href="/" className="text-blue-600 hover:underline flex items-center gap-2">
           <ArrowLeft className="h-4 w-4" />
@@ -147,12 +147,12 @@ export default function AutoRepliesPage() {
           {filtered.map((reply) => (
             <div key={reply.id} className="bg-white rounded-lg border border-slate-200 p-4">
               {/* Header */}
-              <div className="flex justify-between items-start mb-3">
-                <div className="flex-1">
-                  <p className="font-semibold text-slate-900">
+              <div className="flex justify-between items-start mb-3 gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-slate-900 break-words">
                     From: {reply.originalFrom}
                   </p>
-                  <p className="text-sm text-slate-600 truncate">
+                  <p className="text-sm text-slate-600 break-words">
                     Subject: {reply.originalSubject}
                   </p>
                 </div>
@@ -176,12 +176,14 @@ export default function AutoRepliesPage() {
                   value={editText}
                   onChange={(e) => setEditText(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm mb-3"
-                  rows={3}
+                  rows={4}
                 />
               ) : (
-                <p className="bg-slate-50 px-3 py-2 rounded-lg text-sm text-slate-700 mb-3">
-                  {reply.generatedReply}
-                </p>
+                <div className="bg-slate-50 px-4 py-3 rounded-lg mb-3 overflow-auto max-h-40">
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">
+                    {reply.generatedReply}
+                  </p>
+                </div>
               )}
 
               {/* Meta */}
