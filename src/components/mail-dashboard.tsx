@@ -35,12 +35,14 @@ type AttachmentSummary = {
 
 type EmailSummary = {
   id: string;
+  threadId?: string;
   sender: string;
   subject: string;
   snippet: string;
   receivedAt: string;
   attachments: AttachmentSummary[];
   gmailLabels: string[];
+  messageCount?: number;
 };
 
 type EmailDetail = EmailSummary & {
@@ -728,6 +730,11 @@ export function MailDashboard({
                             <span aria-label="Unread" className="size-1.5 shrink-0 rounded-full bg-blue-600" />
                           )}
                           <span className="truncate">{getSenderName(email.sender)}</span>
+                          {email.messageCount && email.messageCount > 1 && (
+                            <span className="shrink-0 text-xs font-normal text-slate-500">
+                              ({email.messageCount})
+                            </span>
+                          )}
                         </span>
                         <time className="shrink-0 text-xs text-slate-500">
                           {formatDate(email.receivedAt, true)}

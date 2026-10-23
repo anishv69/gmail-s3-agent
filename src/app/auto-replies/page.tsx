@@ -27,6 +27,7 @@ export default function AutoRepliesPage() {
   const [editText, setEditText] = useState("");
   const [sendingAll, setSendingAll] = useState(false);
   const [generatingBatch, setGeneratingBatch] = useState(false);
+  const [generateProgress, setGenerateProgress] = useState<{ done: number; remaining: number } | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -106,29 +107,46 @@ export default function AutoRepliesPage() {
   }
 
   async function generateBatchReplies() {
-    if (!confirm("Generate auto-replies for emails without replies? This may take a moment...")) return;
-    
-    setGeneratingBatch(true);
-    try {
-      const response = await fetch("/api/auto-replies/generate-batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
+    if (!confirm("Generate auto-replies for emails without replies? This runs in small batches so you'll see progress as it goes.")) return;
 
-      if (response.ok) {
+    setGeneratingBatch(true);
+    let totalGenerated = 0;
+    try {
+      // The endpoint only processes a bounded batch per call (so each
+      // request stays fast). Keep calling it until no emails remain.
+      while (true) {
+        const response = await fetch("/api/auto-replies/generate-batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          alert(error.error || "Failed to generate batch replies");
+          break;
+        }
+
         const result = await response.json();
-        // Reload replies to get new ones
+        totalGenerated += result.generated;
+        setGenerateProgress({ done: totalGenerated, remaining: result.remaining ?? 0 });
+
+        // Refresh the list as we go so the user sees progress.
         await loadReplies(1);
-        alert(`Generated ${result.generated} new auto-replies!`);
+
+        if (!result.remaining || result.remaining <= 0) break;
+      }
+
+      if (totalGenerated > 0) {
+        alert(`Generated ${totalGenerated} new auto-replies!`);
       } else {
-        const error = await response.json();
-        alert(error.error || "Failed to generate batch replies");
+        alert("No new auto-replies were generated.");
       }
     } catch (error) {
       console.error("Failed to generate batch replies:", error);
       alert("Failed to generate batch replies");
     } finally {
       setGeneratingBatch(false);
+      setGenerateProgress(null);
     }
   }
 
@@ -187,7 +205,11 @@ export default function AutoRepliesPage() {
             disabled={generatingBatch}
             className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {generatingBatch ? "Generating..." : "Generate More"}
+            {generatingBatch
+              ? generateProgress
+                ? `Generating... ${generateProgress.done} done${generateProgress.remaining > 0 ? `, ${generateProgress.remaining} left` : ""}`
+                : "Generating..."
+              : "Generate More"}
           </button>
           <Link href="/settings/auto-reply" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
             Settings

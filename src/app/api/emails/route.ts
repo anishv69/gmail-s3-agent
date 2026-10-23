@@ -73,31 +73,73 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [total, emails] = await Promise.all([
-      prisma.email.count({ where }),
-      prisma.email.findMany({
-        where,
-        orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        select: {
-          id: true,
-          sender: true,
-          subject: true,
-          snippet: true,
-          receivedAt: true,
-          gmailLabels: true,
-          attachments: { select: { id: true, fileName: true, mimeType: true, size: true } },
-        },
-      }),
-    ]);
+    // Fetch every matching message (ordered newest-first) so messages that
+    // belong to the same Gmail thread can be grouped into a single inbox
+    // row, the way Gmail's conversation view collapses them. Pagination is
+    // then applied over threads rather than raw messages.
+    const emails = await prisma.email.findMany({
+      where,
+      orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+        sender: true,
+        subject: true,
+        snippet: true,
+        receivedAt: true,
+        gmailLabels: true,
+        gmailThreadId: true,
+        attachments: { select: { id: true, fileName: true, mimeType: true, size: true } },
+      },
+    });
+
+    // Group messages by thread. Since `emails` is already ordered
+    // newest-first, the first message encountered for a given thread is
+    // necessarily its most recent one, so grouping preserves descending
+    // order across threads without needing a second sort.
+    const threadOrder: string[] = [];
+    const threadMessages = new Map<string, typeof emails>();
+    for (const email of emails) {
+      const key = email.gmailThreadId;
+      const existing = threadMessages.get(key);
+      if (existing) {
+        existing.push(email);
+      } else {
+        threadMessages.set(key, [email]);
+        threadOrder.push(key);
+      }
+    }
+
+    const threads = threadOrder.map((key) => {
+      const messages = threadMessages.get(key)!;
+      const latest = messages[0];
+      const isUnread = messages.some((m) => m.gmailLabels.includes("UNREAD"));
+      const isStarred = messages.some((m) => m.gmailLabels.includes("STARRED"));
+      const labels = new Set(latest.gmailLabels);
+      if (isUnread) labels.add("UNREAD");
+      if (isStarred) labels.add("STARRED");
+      return {
+        id: latest.id,
+        threadId: latest.gmailThreadId,
+        sender: latest.sender,
+        subject: latest.subject,
+        snippet: latest.snippet,
+        receivedAt: latest.receivedAt,
+        gmailLabels: Array.from(labels),
+        attachments: latest.attachments,
+        messageCount: messages.length,
+      };
+    });
+
+    const total = threads.length;
+    const start = (page - 1) * pageSize;
+    const paged = threads.slice(start, start + pageSize);
 
     return NextResponse.json({
-      emails,
+      emails: paged,
       page,
       pageSize,
       total,
-      totalPages: Math.ceil(total / pageSize),
+      totalPages: Math.ceil(total / pageSize) || 1,
     });
   } catch {
     console.error("[emails] list_query_failed");
