@@ -6,6 +6,7 @@ import {
   Archive,
   ArrowDownToLine,
   ArrowLeft,
+  Bot,
   ChevronLeft,
   ChevronDown,
   ChevronRight,
@@ -570,6 +571,15 @@ export function MailDashboard({
                 <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-600">
                   <span className="size-1.5 rounded-full bg-blue-500" />
                   Gmail archive
+                  <Link
+                    href="/auto-replies"
+                    title="View Auto-Replies"
+                    aria-label="Go to auto-replies"
+                    className="ml-2 inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700 transition hover:bg-amber-100"
+                  >
+                    <Bot size={14} strokeWidth={2.2} />
+                    Auto-Replies
+                  </Link>
                 </div>
                 <h1 className="mt-2 text-[26px] font-semibold tracking-[-0.045em] text-slate-950">
                   {filterTitle(filter)}

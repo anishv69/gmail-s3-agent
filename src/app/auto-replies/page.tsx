@@ -24,6 +24,8 @@ export default function AutoRepliesPage() {
   );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  const [sendingAll, setSendingAll] = useState(false);
+  const [generatingBatch, setGeneratingBatch] = useState(false);
 
   useEffect(() => {
     loadReplies();
@@ -61,6 +63,57 @@ export default function AutoRepliesPage() {
       }
     } catch (error) {
       console.error("Failed to send reply:", error);
+    }
+  }
+
+  async function sendAllPending() {
+    if (!confirm("Send all pending auto-replies?")) return;
+    
+    setSendingAll(true);
+    try {
+      const response = await fetch("/api/auto-replies/send-pending", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        // Reload replies to get updated statuses
+        await loadReplies();
+        alert(`Successfully sent ${result.sent} replies!`);
+      }
+    } catch (error) {
+      console.error("Failed to send pending replies:", error);
+      alert("Failed to send pending replies");
+    } finally {
+      setSendingAll(false);
+    }
+  }
+
+  async function generateBatchReplies() {
+    if (!confirm("Generate auto-replies for emails without replies? This may take a moment...")) return;
+    
+    setGeneratingBatch(true);
+    try {
+      const response = await fetch("/api/auto-replies/generate-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        // Reload replies to get new ones
+        await loadReplies();
+        alert(`Generated ${result.generated} new auto-replies!`);
+      } else {
+        const error = await response.json();
+        alert(error.error || "Failed to generate batch replies");
+      }
+    } catch (error) {
+      console.error("Failed to generate batch replies:", error);
+      alert("Failed to generate batch replies");
+    } finally {
+      setGeneratingBatch(false);
     }
   }
 
@@ -110,9 +163,18 @@ export default function AutoRepliesPage() {
 
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Auto-Replies</h1>
-        <Link href="/settings/auto-reply" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-          Settings
-        </Link>
+        <div className="flex gap-3">
+          <button
+            onClick={generateBatchReplies}
+            disabled={generatingBatch}
+            className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {generatingBatch ? "Generating..." : "Generate More"}
+          </button>
+          <Link href="/settings/auto-reply" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            Settings
+          </Link>
+        </div>
       </div>
 
       {/* Filter Tabs */}
