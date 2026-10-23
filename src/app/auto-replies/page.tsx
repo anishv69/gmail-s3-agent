@@ -145,26 +145,26 @@ export default function AutoRepliesPage() {
       ) : (
         <div className="space-y-4">
           {filtered.map((reply) => (
-            <div key={reply.id} className="bg-white rounded-lg border border-slate-200 p-4">
-              {/* Header */}
-              <div className="flex justify-between items-start mb-3 gap-4">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-900 break-words">
+            <div key={reply.id} className="bg-white rounded-lg border border-slate-200 p-5">
+              {/* Header Row */}
+              <div className="flex justify-between items-start gap-4 mb-4">
+                <div className="flex-1">
+                  <p className="font-semibold text-slate-900">
                     From: {reply.originalFrom}
                   </p>
-                  <p className="text-sm text-slate-600 break-words">
+                  <p className="text-sm text-slate-600 mt-1">
                     Subject: {reply.originalSubject}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex gap-2 shrink-0">
                   <span
-                    className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
                       statusColors[reply.status]
                     }`}
                   >
                     {reply.status === "pending_send" ? "Pending" : reply.status}
                   </span>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded whitespace-nowrap">
                     {(reply.confidence * 100).toFixed(0)}%
                   </span>
                 </div>
@@ -175,23 +175,21 @@ export default function AutoRepliesPage() {
                 <textarea
                   value={editText}
                   onChange={(e) => setEditText(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm mb-3"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm mb-4"
                   rows={4}
                 />
               ) : (
-                <div className="bg-slate-50 px-4 py-3 rounded-lg mb-3 overflow-auto max-h-40">
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">
+                <div className="bg-slate-50 px-4 py-3 rounded-lg mb-4 border border-slate-200">
+                  <p className="text-sm text-slate-700 leading-relaxed">
                     {reply.generatedReply}
                   </p>
                 </div>
               )}
 
               {/* Meta */}
-              <div className="flex justify-between items-center text-xs text-slate-500">
-                <span>
-                  {new Date(reply.createdAt).toLocaleString()}
-                  {reply.sentAt && ` • Sent: ${new Date(reply.sentAt).toLocaleString()}`}
-                </span>
+              <div className="text-xs text-slate-500 mb-4">
+                {new Date(reply.createdAt).toLocaleString()}
+                {reply.sentAt && ` • Sent: ${new Date(reply.sentAt).toLocaleString()}`}
               </div>
 
               {/* Actions */}
