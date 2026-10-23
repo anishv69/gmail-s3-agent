@@ -22,11 +22,11 @@ export default function AutoRepliesPage() {
   const [filter, setFilter] = useState<"all" | "draft" | "sent" | "pending_send">(
     "all"
   );
+  const [searchTerm, setSearchTerm] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [sendingAll, setSendingAll] = useState(false);
   const [generatingBatch, setGeneratingBatch] = useState(false);
-  const [displayCount, setDisplayCount] = useState(20);
 
   useEffect(() => {
     loadReplies();
@@ -134,9 +134,17 @@ export default function AutoRepliesPage() {
     }
   }
 
-  const filtered = replies.filter(
-    (r) => filter === "all" || r.status === filter
-  );
+  const filtered = replies
+    .filter((r) => filter === "all" || r.status === filter)
+    .filter((r) => {
+      if (!searchTerm.trim()) return true;
+      const term = searchTerm.toLowerCase();
+      return (
+        r.originalFrom.toLowerCase().includes(term) ||
+        r.originalSubject.toLowerCase().includes(term) ||
+        r.generatedReply.toLowerCase().includes(term)
+      );
+    });
 
   const statusColors = {
     draft: "bg-yellow-100 text-yellow-800",
@@ -185,16 +193,24 @@ export default function AutoRepliesPage() {
         </div>
       </div>
 
+      {/* Search Bar */}
+      <div className="mb-6">
+        <input
+          type="text"
+          placeholder="Search by sender, subject, or reply text..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+        />
+      </div>
+
       {/* Filter Tabs */}
       <div className="flex gap-2 mb-6 items-center justify-between">
         <div className="flex gap-2">
           {["all", "draft", "pending_send", "sent"].map((tab) => (
             <button
               key={tab}
-              onClick={() => {
-                setFilter(tab as any);
-                setDisplayCount(20); // Reset display count when filtering
-              }}
+              onClick={() => setFilter(tab as any)}
               className={`px-4 py-2 rounded-lg font-medium transition ${
                 filter === tab
                   ? "bg-blue-600 text-white"
@@ -210,19 +226,19 @@ export default function AutoRepliesPage() {
           ))}
         </div>
         <div className="text-sm text-slate-600 font-medium">
-          Showing {Math.min(displayCount, filtered.length)} of {filtered.length}
+          {filtered.length === 0 ? "No results" : `${filtered.length} replies`}
         </div>
       </div>
 
       {/* Replies List */}
       {filtered.length === 0 ? (
         <div className="text-center py-12 text-slate-500">
-          <p className="text-lg">No auto-replies yet</p>
-          <p className="text-sm">Enable auto-reply in settings to get started</p>
+          <p className="text-lg">No auto-replies found</p>
+          <p className="text-sm">Try adjusting your search or filters</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {filtered.slice(0, displayCount).map((reply) => (
+          {filtered.map((reply) => (
             <div key={reply.id} className="bg-white rounded-lg border border-slate-200 p-5">
               {/* Header Row */}
               <div className="flex justify-between items-start gap-4 mb-4">
@@ -320,30 +336,6 @@ export default function AutoRepliesPage() {
               ) : null}
             </div>
           ))}
-          
-          {/* Load More Button */}
-          {displayCount < filtered.length && (
-            <div className="flex justify-center pt-4">
-              <button
-                onClick={() => setDisplayCount(displayCount + 20)}
-                className="px-6 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 font-medium text-sm"
-              >
-                Load More ({filtered.length - displayCount} remaining)
-              </button>
-            </div>
-          )}
-          
-          {/* Show All Button */}
-          {displayCount < filtered.length && (
-            <div className="flex justify-center pt-2">
-              <button
-                onClick={() => setDisplayCount(filtered.length)}
-                className="px-6 py-2 text-slate-600 text-sm hover:underline"
-              >
-                Show All
-              </button>
-            </div>
-          )}
         </div>
       )}
     </div>
