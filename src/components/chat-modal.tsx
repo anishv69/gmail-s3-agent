@@ -63,6 +63,9 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
         body: JSON.stringify({
           question: input,
           conversationId,
+          // Send recent turns so the assistant can understand follow-up
+          // questions ("what about her other email?") in context.
+          history: messages.slice(-10).map((m) => ({ role: m.role, content: m.content })),
         }),
       });
 

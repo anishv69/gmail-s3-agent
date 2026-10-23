@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { answerQuestion } from "@/lib/ai/answer";
+import type { ConversationTurn } from "@/lib/ai/answer";
 import { hasDashboardAuthorization } from "@/lib/dashboard-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+const MAX_HISTORY_MESSAGES = 10;
+const MAX_HISTORY_MESSAGE_LENGTH = 1200;
 
 function isValidTimeZone(timeZone: string): boolean {
   try {
@@ -13,6 +17,27 @@ function isValidTimeZone(timeZone: string): boolean {
   } catch {
     return false;
   }
+}
+
+function parseHistory(value: unknown): ConversationTurn[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const turns: ConversationTurn[] = [];
+  for (const item of value.slice(-MAX_HISTORY_MESSAGES)) {
+    if (
+      item &&
+      typeof item === "object" &&
+      "role" in item &&
+      "content" in item &&
+      (item.role === "user" || item.role === "assistant") &&
+      typeof item.content === "string"
+    ) {
+      turns.push({
+        role: item.role,
+        content: item.content.slice(0, MAX_HISTORY_MESSAGE_LENGTH),
+      });
+    }
+  }
+  return turns;
 }
 
 export async function POST(request: NextRequest) {
@@ -26,7 +51,9 @@ export async function POST(request: NextRequest) {
     );
   }
   const contentLength = Number(request.headers.get("content-length") ?? "0");
-  if (contentLength > 8192) {
+  // Raised from 8192 to accommodate recent conversation history sent along
+  // with each question (up to ~10 prior turns) for contextual follow-ups.
+  if (contentLength > 32768) {
     return NextResponse.json({ error: "Question request is too large." }, { status: 413 });
   }
 
@@ -40,6 +67,11 @@ export async function POST(request: NextRequest) {
       body && typeof body === "object" && "timeZone" in body
         ? (body as { timeZone?: unknown }).timeZone
         : "UTC";
+    const history = parseHistory(
+      body && typeof body === "object" && "history" in body
+        ? (body as { history?: unknown }).history
+        : undefined,
+    );
     if (typeof question !== "string" || question.trim().length === 0) {
       return NextResponse.json({ error: "Enter a question." }, { status: 400 });
     }
@@ -56,7 +88,7 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json({ error: "Provide a valid IANA time zone." }, { status: 400 });
     }
-    const result = await answerQuestion(question, timeZone);
+    const result = await answerQuestion(question, timeZone, history);
     console.log(`[AI] Answer generated for: "${question}"`);
     console.log(`[AI] Response: ${result.answer.substring(0, 100)}...`);
     console.log(`[AI] Sources count: ${result.sources.length}`);

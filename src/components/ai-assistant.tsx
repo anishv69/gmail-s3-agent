@@ -133,6 +133,9 @@ export function AiAssistant() {
           body: JSON.stringify({
             question: value,
             timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+            // Send recent turns (prior to this question) so follow-up
+            // questions are understood in context.
+            history: messages.slice(-10).map((m) => ({ role: m.role, content: m.content })),
           }),
         }),
       );
