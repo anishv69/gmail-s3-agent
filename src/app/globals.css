@@ -79,6 +79,10 @@ button {
   table-layout: auto;
 }
 
+.email-html tr {
+  display: table-row !important;
+}
+
 .email-html td,
 .email-html th {
   vertical-align: top;
@@ -87,6 +91,8 @@ button {
   max-width: 100% !important;
   width: auto !important;
   word-break: break-word;
+  display: table-cell !important;
+  min-width: 0;
 }
 
 .email-html a {
@@ -117,4 +123,23 @@ button {
   overflow-wrap: break-word;
   white-space: pre-wrap;
   max-width: 100%;
+}
+
+/* Prevent date elements from breaking */
+.email-html time,
+.email-html nobr,
+.email-html .nowrap {
+  white-space: nowrap;
+}
+
+/* Keep inline elements together */
+.email-html span {
+  display: inline;
+}
+
+/* Collapse table cells properly */
+.email-html td > span,
+.email-html th > span {
+  display: inline;
+  white-space: normal;
 }
