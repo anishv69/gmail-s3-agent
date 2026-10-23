@@ -27,17 +27,31 @@ export default function AutoRepliesPage() {
   const [editText, setEditText] = useState("");
   const [sendingAll, setSendingAll] = useState(false);
   const [generatingBatch, setGeneratingBatch] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const pageSize = 25;
 
   useEffect(() => {
-    loadReplies();
-  }, []);
+    loadReplies(1);
+  }, [filter, searchTerm]);
 
-  async function loadReplies() {
+  async function loadReplies(pageNum: number) {
     try {
-      const response = await fetch("/api/auto-replies");
+      const params = new URLSearchParams({
+        page: pageNum.toString(),
+        limit: pageSize.toString(),
+      });
+      if (filter !== "all") params.append("status", filter);
+      if (searchTerm.trim()) params.append("search", searchTerm);
+      
+      const response = await fetch(`/api/auto-replies?${params}`);
       if (response.ok) {
         const data = await response.json();
-        setReplies(data);
+        setReplies(data.data);
+        setTotal(data.pagination.total);
+        setTotalPages(data.pagination.totalPages);
+        setPage(pageNum);
       }
     } catch (error) {
       console.error("Failed to load replies:", error);
@@ -80,7 +94,7 @@ export default function AutoRepliesPage() {
       if (response.ok) {
         const result = await response.json();
         // Reload replies to get updated statuses
-        await loadReplies();
+        await loadReplies(1);
         alert(`Successfully sent ${result.sent} replies!`);
       }
     } catch (error) {
@@ -104,7 +118,7 @@ export default function AutoRepliesPage() {
       if (response.ok) {
         const result = await response.json();
         // Reload replies to get new ones
-        await loadReplies();
+        await loadReplies(1);
         alert(`Generated ${result.generated} new auto-replies!`);
       } else {
         const error = await response.json();
@@ -133,18 +147,6 @@ export default function AutoRepliesPage() {
       console.error("Failed to delete reply:", error);
     }
   }
-
-  const filtered = replies
-    .filter((r) => filter === "all" || r.status === filter)
-    .filter((r) => {
-      if (!searchTerm.trim()) return true;
-      const term = searchTerm.toLowerCase();
-      return (
-        r.originalFrom.toLowerCase().includes(term) ||
-        r.originalSubject.toLowerCase().includes(term) ||
-        r.generatedReply.toLowerCase().includes(term)
-      );
-    });
 
   const statusColors = {
     draft: "bg-yellow-100 text-yellow-800",
@@ -175,10 +177,10 @@ export default function AutoRepliesPage() {
         <div className="flex gap-3">
           <button
             onClick={sendAllPending}
-            disabled={sendingAll || filtered.filter(r => r.status === 'pending_send').length === 0}
+            disabled={sendingAll || replies.filter(r => r.status === 'pending_send').length === 0}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {sendingAll ? "Sending..." : `Send All Pending (${filtered.filter(r => r.status === 'pending_send').length})`}
+            {sendingAll ? "Sending..." : `Send All Pending (${replies.filter(r => r.status === 'pending_send').length})`}
           </button>
           <button
             onClick={generateBatchReplies}
@@ -226,19 +228,19 @@ export default function AutoRepliesPage() {
           ))}
         </div>
         <div className="text-sm text-slate-600 font-medium">
-          {filtered.length === 0 ? "No results" : `${filtered.length} replies`}
+          {total === 0 ? "No results" : `${replies.length} of ${total} replies`}
         </div>
       </div>
 
       {/* Replies List */}
-      {filtered.length === 0 ? (
+      {replies.length === 0 ? (
         <div className="text-center py-12 text-slate-500">
           <p className="text-lg">No auto-replies found</p>
           <p className="text-sm">Try adjusting your search or filters</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {filtered.map((reply) => (
+          {replies.map((reply) => (
             <div key={reply.id} className="bg-white rounded-lg border border-slate-200 p-5">
               {/* Header Row */}
               <div className="flex justify-between items-start gap-4 mb-4">
@@ -336,6 +338,31 @@ export default function AutoRepliesPage() {
               ) : null}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Pagination Footer - like inbox */}
+      {total > pageSize && (
+        <div className="mt-6 flex items-center justify-between border-t border-slate-200 pt-4">
+          <div className="text-sm text-slate-600">
+            {total === 0 ? "0" : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => loadReplies(Math.max(1, page - 1))}
+              disabled={page === 1}
+              className="px-3 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ‹ Previous
+            </button>
+            <button
+              onClick={() => loadReplies(Math.min(totalPages, page + 1))}
+              disabled={page === totalPages}
+              className="px-3 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next ›
+            </button>
+          </div>
         </div>
       )}
     </div>

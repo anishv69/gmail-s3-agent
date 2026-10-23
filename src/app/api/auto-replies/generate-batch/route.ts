@@ -17,8 +17,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Get emails that don't have auto-replies yet
-    // First get all emails, then filter out those with replies
+    // Get ALL emails that don't have auto-replies yet
     const emails = await prisma.email.findMany({
       select: {
         id: true,
@@ -30,7 +29,7 @@ export async function POST(request: NextRequest) {
       orderBy: {
         receivedAt: "desc",
       },
-      take: 20, // Process 20 at a time
+      // Don't limit - get all emails
     });
 
     // Get IDs of emails that already have auto-replies
@@ -57,6 +56,8 @@ export async function POST(request: NextRequest) {
 
     let generatedCount = 0;
     const errors: string[] = [];
+
+    console.log(`[Auto-Reply] Starting batch generation for ${emailsWithoutReplies.length} emails`);
 
     for (const email of emailsWithoutReplies) {
       try {
@@ -104,9 +105,9 @@ export async function POST(request: NextRequest) {
         });
 
         generatedCount++;
-        console.log(
-          `[Auto-Reply] Generated reply for email from ${email.sender}`
-        );
+        if (generatedCount % 10 === 0) {
+          console.log(`[Auto-Reply] Generated ${generatedCount} replies so far...`);
+        }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : "Unknown error";
         errors.push(`Failed to generate reply for ${email.id}: ${errorMsg}`);
@@ -114,12 +115,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    console.log(`[Auto-Reply] Batch generation complete: ${generatedCount} replies generated`);
+
     return NextResponse.json({
       success: true,
       generated: generatedCount,
       total: emailsWithoutReplies.length,
-      errors: errors.length > 0 ? errors : undefined,
-      message: `Generated ${generatedCount} auto-replies`,
+      skipped: emailsWithoutReplies.length - generatedCount,
+      errors: errors.length > 0 ? errors.slice(0, 5) : undefined, // Show first 5 errors only
+      message: `Generated ${generatedCount} auto-replies from ${emailsWithoutReplies.length} emails`,
     });
   } catch (error) {
     console.error("[Auto-Reply] Generate batch error:", error);
