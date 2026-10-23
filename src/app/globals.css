@@ -46,25 +46,37 @@ button {
   isolation: isolate;
   max-width: 100%;
   overflow-x: auto;
-  overflow-wrap: anywhere;
   color: #1e293b;
   font: inherit;
   line-height: 1.8;
+  word-break: break-word;
 }
 
 .email-html *,
 .email-html *::before,
 .email-html *::after {
   box-sizing: border-box;
-  max-width: 100%;
-  overflow-wrap: anywhere;
+  max-width: 100% !important;
+  width: auto !important;
+  overflow-wrap: break-word;
+  word-break: break-word;
   font-family: inherit;
+  overflow-x: visible !important;
+  background-size: auto !important;
+}
+
+.email-html img {
+  max-width: 100% !important;
+  width: auto !important;
+  height: auto !important;
+  display: block;
 }
 
 .email-html table {
-  width: auto;
+  width: 100% !important;
   max-width: 100%;
   border-collapse: collapse;
+  table-layout: auto;
 }
 
 .email-html td,
@@ -72,16 +84,37 @@ button {
   vertical-align: top;
   color: inherit;
   font-size: inherit;
+  max-width: 100% !important;
+  width: auto !important;
+  word-break: break-word;
 }
 
 .email-html a {
   color: #2563eb;
   text-decoration: underline;
+  word-break: break-all;
 }
 
 .email-html p,
 .email-html li,
-.email-html div {
+.email-html div,
+.email-html span,
+.email-html h1,
+.email-html h2,
+.email-html h3,
+.email-html h4,
+.email-html h5,
+.email-html h6 {
   color: inherit;
   line-height: inherit;
+  max-width: 100% !important;
+  width: auto !important;
+  word-break: break-word;
+}
+
+.email-body {
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  max-width: 100%;
 }
