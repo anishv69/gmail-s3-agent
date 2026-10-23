@@ -132,6 +132,7 @@ model AutoReply {
   updatedAt     DateTime @updatedAt
   settings      AutoReplySettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
 
+  @@unique([emailId, settingsId])
   @@index([emailId])
   @@index([status])
   @@index([settingsId])

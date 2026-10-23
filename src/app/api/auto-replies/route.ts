@@ -25,16 +25,35 @@ export async function GET(request: NextRequest) {
     // Get total count
     const total = await prisma.autoReply.count({ where });
 
-    // Get paginated replies
+    // Get paginated replies with email data, ordered by email receivedAt (latest first)
     const replies = await prisma.autoReply.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      include: {
+        settings: true,
+      },
       take: limit,
       skip: skip,
     });
 
+    // Fetch emails for these replies to get receivedAt dates, then sort
+    const emailIds = replies.map(r => r.emailId);
+    const emails = await prisma.email.findMany({
+      where: { id: { in: emailIds } },
+      select: { id: true, receivedAt: true },
+    });
+
+    const emailMap = new Map(emails.map(e => [e.id, e]));
+
+    // Sort replies by email receivedAt (latest first)
+    const sortedReplies = replies.sort((a, b) => {
+      const emailA = emailMap.get(a.emailId);
+      const emailB = emailMap.get(b.emailId);
+      if (!emailA || !emailB) return 0;
+      return emailB.receivedAt.getTime() - emailA.receivedAt.getTime();
+    });
+
     return NextResponse.json({
-      data: replies,
+      data: sortedReplies,
       pagination: {
         page,
         limit,

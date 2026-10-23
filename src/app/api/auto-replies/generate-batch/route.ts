@@ -89,9 +89,20 @@ export async function POST(request: NextRequest) {
           settings.responseTone as "professional" | "friendly" | "formal"
         );
 
-        // Save as auto-reply
-        await prisma.autoReply.create({
-          data: {
+        // Upsert auto-reply (update if exists, create if not)
+        await prisma.autoReply.upsert({
+          where: {
+            emailId_settingsId: {
+              emailId: email.id,
+              settingsId: settings.id,
+            },
+          },
+          update: {
+            generatedReply: reply.reply,
+            confidence: reply.confidence,
+            shouldAutoSend: settings.autoSendToKnown && reply.shouldAutoSend,
+          },
+          create: {
             emailId: email.id,
             settingsId: settings.id,
             originalFrom: email.sender,
