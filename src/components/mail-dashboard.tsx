@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import {
   Archive,
   ArrowDownToLine,
@@ -540,6 +541,14 @@ export function MailDashboard({
               </button>
             ))}
           </nav>
+          <Link
+            href="/ai-assistant"
+            title="AI Assistant"
+            aria-label="AI Assistant"
+            className="mt-3 grid size-11 place-items-center rounded-2xl bg-indigo-50 text-indigo-600 transition hover:bg-indigo-100"
+          >
+            <Sparkles size={19} strokeWidth={1.9} />
+          </Link>
           <button
             type="button"
             disabled
@@ -594,7 +603,7 @@ export function MailDashboard({
               )}
             </label>
 
-            <div className="mt-4 grid grid-cols-5 gap-1 md:hidden">
+            <div className="mt-4 grid grid-cols-6 gap-1 md:hidden">
               {navigationItems.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
@@ -607,6 +616,14 @@ export function MailDashboard({
                   <Icon size={13} className="shrink-0" />
                 </button>
               ))}
+              <Link
+                href="/ai-assistant"
+                aria-label="AI Assistant"
+                title="AI Assistant"
+                className="inline-flex min-w-0 items-center justify-center rounded-xl bg-indigo-50 px-1 py-2 text-[10px] font-semibold text-indigo-700"
+              >
+                <Sparkles size={13} className="shrink-0" />
+              </Link>
             </div>
             <div className="mt-4 flex items-center justify-end">
               <button

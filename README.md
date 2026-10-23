@@ -12,6 +12,14 @@ Gmail system labels are stored separately for server-side Inbox, Sent, Starred,
 and Archive filters. Existing unlabelled archive rows remain visible in Inbox
 until the resumable history scan refreshes their labels from Gmail.
 
+An optional authenticated `/ai-assistant` page can index archived email text
+from PostgreSQL and supported attachment files from private S3, then answer
+questions with source citations. It uses OpenAI embeddings and generation only
+when `OPENAI_API_KEY` is configured and an authorized user explicitly starts
+indexing or asks a question. Extracted text and question context are sent to
+OpenAI for those operations. No indexing or AI-provider request runs during
+Gmail synchronization.
+
 ## Requirements
 
 - Node.js 20+
@@ -365,6 +373,79 @@ advisory lock prevents overlapping scheduled cycles across instances, but
 additional app instances still increase infrastructure cost. Use a Render
 private database URL and do not expose PostgreSQL publicly. This preparation
 does not create Render resources or deploy the application.
+
+## AI assistant and document indexing
+
+The AI assistant uses the existing mailbox access boundary: the page and every
+AI API require the same HTTP Basic dashboard authorization. Email content is
+read from the existing PostgreSQL `Email` rows. S3 currently contains
+attachment objects referenced by PostgreSQL `Attachment` rows; the indexer
+reads only those private object keys and does not list the bucket or make
+objects public. JSON, TXT, HTML, PDF, and DOCX attachments are supported.
+
+### Provider data handling
+
+Set `OPENAI_API_KEY` only in a trusted server-side environment (local ignored
+`.env`, Vercel server environment variables, or another secret manager). Do not
+use a `NEXT_PUBLIC_` variable. The assistant uses `text-embedding-3-small`
+(1536 dimensions) and `gpt-4.1-mini` by default; `AI_CHAT_MODEL` can override
+the answer model. Starting indexing sends extracted
+email and attachment text to OpenAI to create embeddings. Asking a question
+sends the query and retrieved passages to OpenAI to generate an answer. Do not
+configure the key or start indexing until this provider use is approved for the
+mailbox's data. Credentials and document contents are not written to logs.
+
+### Neon and indexing setup
+
+1. Keep `DATABASE_URL` pointed at the Neon pooled/runtime URL for normal Prisma
+   and vector queries. Set `DIRECT_URL` to the Neon direct (non-pooled)
+   connection URL for the AI indexing advisory lock. The application does not
+   rewrite either connection string.
+2. Enable the Neon `vector` extension for the database. The additive migration
+   `20261019000000_add_ai_rag_index` creates the extension, AI document/chunk/
+   progress tables, and a cosine HNSW index. It does not alter or delete Gmail
+   records. Review and apply it through the normal migration process only after
+   confirming extension availability and approving the database change; this
+   project does not automatically apply it to Vercel or production.
+3. Configure `OPENAI_API_KEY`, `AI_CHAT_MODEL` (optional), and `DIRECT_URL` in
+   the Vercel project
+   environment settings. Also ensure the existing `DATABASE_URL`,
+   `DASHBOARD_USERNAME`, `DASHBOARD_PASSWORD`, `AWS_REGION`, and `S3_BUCKET`
+   are correctly set. No OpenAI key is needed for Gmail sync.
+4. Deploy only after the reviewed migration is applied. Visit `/ai-assistant`
+   and choose **Index or update library**. Each click processes at most ten
+   small batches, with two source records per batch, and can be continued
+   later. Each request processes one source at a time and a click runs at most
+   ten small requests. The digest makes unchanged records skip embedding work;
+   re-running the scan picks up newly synchronized email and attachment rows.
+   Per-record parse/index failures are reported as counts and safe error codes.
+5. Ask a question after indexing completes. Semantic search returns a bounded
+   set of passages; answers cite source emails or attachments and state when
+   the    indexed evidence is insufficient. Verify important answers in Gmail or
+   the original attachment.
+
+   Questions about the latest emails use the received-time ordering stored with
+   the indexed sources. Questions containing “yesterday” are scoped to the
+   requesting browser's calendar day in its supplied IANA time zone, including
+   daylight-saving transitions.
+
+The indexer requires `s3:GetObject` for the existing private `emails/*`
+attachment prefix. It does not require `s3:ListBucket`, `s3:PutObject`, or any
+new public S3 access. The API reads a bounded number of records per request
+(`maxDuration` 60 seconds) rather than attempting a full-mailbox indexing pass
+inside one Vercel function invocation. The browser can continue batches, so
+keep the assistant tab open while a batch is processing. Each attachment is
+limited to 10 MiB and extracted text is capped at 30,000 characters; larger or
+unsupported inputs are marked failed and can be reviewed from progress counts.
+DOCX expansion is capped at 30 MiB and PDF parsing at 50 pages to bound
+decompression and execution work.
+The checked-in
+GitHub Actions workflow is CI-only; it is not an indexing worker or a Gmail
+synchronization schedule.
+
+Run the focused offline tests with `npm run test:ai`. They test text parsing,
+chunking, idempotent indexing behavior, retrieval/answer citations, and the
+no-evidence response without contacting OpenAI, S3, or the production database.
 
 ## Commands
 

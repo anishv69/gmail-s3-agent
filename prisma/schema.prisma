@@ -1,10 +1,12 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 model Email {
@@ -21,6 +23,7 @@ model Email {
   receivedAt     DateTime     @db.Timestamptz(3)
   createdAt      DateTime     @default(now())
   attachments    Attachment[]
+  aiDocuments    AiDocument[]
 
   @@index([receivedAt])
 }
@@ -40,8 +43,97 @@ model Attachment {
   @@index([emailId])
 }
 
+model AiDocument {
+  id                String             @id @default(cuid())
+  sourceType        String
+  sourceId          String
+  emailId           String?
+  s3Key             String?
+  gmailMessageId    String?
+  title             String
+  sender            String?
+  receivedAt        DateTime?          @db.Timestamptz(3)
+  mimeType          String
+  contentHash       String
+  indexStatus       String             @default("PENDING")
+  failureCode       String?
+  indexedAt         DateTime?          @db.Timestamptz(3)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  email             Email?             @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  chunks            AiDocumentChunk[]
+
+  @@unique([sourceType, sourceId])
+  @@index([indexStatus])
+  @@index([emailId])
+  @@index([receivedAt])
+}
+
+model AiDocumentChunk {
+  id          String     @id @default(cuid())
+  documentId  String
+  chunkIndex  Int
+  content     String     @db.Text
+  embedding   Unsupported("vector(1536)")
+  createdAt   DateTime   @default(now())
+  document    AiDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, chunkIndex])
+  @@index([documentId])
+}
+
+model AiIndexState {
+  key                String    @id @default("default")
+  status             String    @default("idle")
+  phase              String    @default("EMAIL")
+  cursorId           String?
+  processedDocuments Int       @default(0)
+  skippedDocuments   Int       @default(0)
+  failedDocuments    Int       @default(0)
+  startedAt          DateTime? @db.Timestamptz(3)
+  completedAt        DateTime? @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt
+}
+
 model SyncState {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+model AutoReplySettings {
+  id               String   @id @default(cuid())
+  enabled          Boolean  @default(false)
+  autoSendToKnown  Boolean  @default(false)
+  responseTemplate String?  @db.Text
+  responseTone     String   @default("professional")
+  excludeSenders   String[] @default([])
+  excludeSubjects  String[] @default([])
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  autoReplies      AutoReply[]
+
+  @@index([enabled])
+}
+
+model AutoReply {
+  id            String   @id @default(cuid())
+  emailId       String
+  settingsId    String
+  originalFrom  String
+  originalTo    String
+  originalSubject String
+  generatedReply String @db.Text
+  status        String   @default("draft")
+  confidence    Float    @default(0.7)
+  shouldAutoSend Boolean  @default(false)
+  sentAt        DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  settings      AutoReplySettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+
+  @@index([emailId])
+  @@index([status])
+  @@index([settingsId])
+  @@index([createdAt])
 }
