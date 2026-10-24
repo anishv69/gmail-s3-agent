@@ -1,6 +1,5 @@
 import { decode } from "entities";
 import mammoth from "mammoth";
-import { PDFParse } from "pdf-parse";
 import sanitizeHtml from "sanitize-html";
 
 export type ExtractedDocument = {
@@ -130,7 +129,11 @@ export async function extractDocumentText(
 
   if (isPdf(normalizedMime, fileName)) {
     parserMime = "application/pdf";
-    const parser = new PDFParse({ data: bytes });
+    // Initialize the Node canvas globals before PDF.js loads on serverless hosts.
+    const { CanvasFactory, getData } = await import("pdf-parse/worker");
+    const { PDFParse } = await import("pdf-parse");
+    PDFParse.setWorker(getData());
+    const parser = new PDFParse({ data: bytes, CanvasFactory });
     try {
       const result = await parser.getText({ first: MAX_PDF_PAGES });
       text = result.text;
