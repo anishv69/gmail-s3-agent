@@ -8,8 +8,9 @@ import { withGmailSchedulerLock } from "@/lib/scheduler-lock";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
-export async function POST(request: NextRequest) {
+async function poll(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
     return NextResponse.json(
@@ -70,4 +71,12 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(request: NextRequest) {
+  return poll(request);
+}
+
+export async function POST(request: NextRequest) {
+  return poll(request);
 }

@@ -16,6 +16,13 @@ type SchedulerGlobal = typeof globalThis & {
 
 const schedulerGlobal = globalThis as SchedulerGlobal;
 
+function usesPlatformScheduler(): boolean {
+  return (
+    process.env.VERCEL === "1" &&
+    process.env.GMAIL_SYNC_ENABLED === "true"
+  );
+}
+
 export function getGmailSchedulerState(): {
   enabled: boolean;
   intervalMs: number;
@@ -23,7 +30,7 @@ export function getGmailSchedulerState(): {
   syncing: boolean;
 } {
   return {
-    enabled: Boolean(schedulerGlobal.gmailSyncScheduler),
+    enabled: Boolean(schedulerGlobal.gmailSyncScheduler) || usesPlatformScheduler(),
     intervalMs: schedulerGlobal.gmailSyncIntervalMs ?? getPollIntervalMs(),
     nextRunAt: schedulerGlobal.gmailSyncNextRunAt ?? null,
     syncing: schedulerGlobal.gmailSyncSchedulerBusy === true,
@@ -122,6 +129,12 @@ export function startGmailScheduler(): void {
   if (process.env.GMAIL_SYNC_ENABLED !== "true") {
     stopGmailScheduler("disabled");
     console.info("[gmail-sync] scheduler_disabled");
+    return;
+  }
+
+  if (usesPlatformScheduler()) {
+    stopGmailScheduler("delegated_to_vercel_cron");
+    console.info("[gmail-sync] scheduler_delegated_to_vercel_cron");
     return;
   }
 
