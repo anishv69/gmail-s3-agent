@@ -3,6 +3,8 @@ name: Gmail Auto Sync
 
 on:
   schedule:
+    # GitHub's minimum schedule interval is five minutes. Each job polls five
+    # times, 60 seconds apart. Delayed job starts can still leave gaps.
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
@@ -16,24 +18,60 @@ concurrency:
 jobs:
   sync-gmail:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
 
     steps:
-      - name: Trigger Vercel Gmail Sync
+      - name: Sync Gmail every minute for five minutes
+        shell: bash
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
+          set -euo pipefail
+
           if [ -z "$CRON_SECRET" ]; then
             echo "CRON_SECRET is missing"
             exit 1
           fi
 
-          curl --fail-with-body \
-            --silent --show-error \
-            --retry 2 \
-            --retry-delay 5 \
-            --max-time 240 \
-            --request POST \
-            --header "Authorization: Bearer $CRON_SECRET" \
-            --header "Content-Type: application/json" \
-            "https://gmail-s3-agent.vercel.app/api/cron/poll"
+          started_at=$SECONDS
+          failed=0
+          for attempt in 0 1 2 3 4; do
+            # Anchor calls to the start time so request duration does not add
+            # another minute of drift. There is no sleep after the final call.
+            wait_seconds=$((started_at + attempt * 60 - SECONDS))
+            if [ "$wait_seconds" -gt 0 ]; then
+              sleep "$wait_seconds"
+            fi
+
+            echo "Sync attempt $((attempt + 1))/5"
+            # Bound each request below one minute; do not retry POSTs immediately.
+            # Discard the response body to keep mailbox data out of Actions logs.
+            if status=$(curl \
+              --silent --show-error \
+              --output /dev/null \
+              --write-out '%{http_code}' \
+              --connect-timeout 10 \
+              --max-time 55 \
+              --request POST \
+              --header "Authorization: Bearer $CRON_SECRET" \
+              --header "Content-Type: application/json" \
+              "https://gmail-s3-agent.vercel.app/api/cron/poll"); then
+              case "$status" in
+                200) echo "Sync completed." ;;
+                409) echo "Sync already running; skipped this attempt." ;;
+                401|403)
+                  echo "::error::Sync authorization failed (HTTP $status). Check CRON_SECRET and deployment access."
+                  exit 1
+                  ;;
+                *)
+                  echo "::warning::Sync returned HTTP $status; trying again at the next minute."
+                  failed=1
+                  ;;
+              esac
+            else
+              echo "::warning::Sync request failed or timed out; trying again at the next minute."
+              failed=1
+            fi
+          done
+
+          exit "$failed"
