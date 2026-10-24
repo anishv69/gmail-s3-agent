@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { MailDashboard } from "@/components/mail-dashboard";
+import { decodeEmailSnippet } from "@/lib/email-text";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +91,7 @@ export default async function Home() {
     <MailDashboard
       initialEmails={emails.map((email) => ({
         ...email,
+        snippet: decodeEmailSnippet(email.snippet),
         receivedAt: email.receivedAt.toISOString(),
       }))}
       initialTotal={total}

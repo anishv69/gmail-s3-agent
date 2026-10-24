@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { hasDashboardAuthorization } from "@/lib/dashboard-auth";
+import { decodeEmailSnippet } from "@/lib/email-text";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -122,7 +123,7 @@ export async function GET(request: NextRequest) {
         threadId: latest.gmailThreadId,
         sender: latest.sender,
         subject: latest.subject,
-        snippet: latest.snippet,
+        snippet: decodeEmailSnippet(latest.snippet),
         receivedAt: latest.receivedAt,
         gmailLabels: Array.from(labels),
         attachments: latest.attachments,

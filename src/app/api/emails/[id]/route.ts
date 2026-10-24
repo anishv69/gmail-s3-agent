@@ -1,20 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { decodeHTML } from "entities";
 import { hasDashboardAuthorization } from "@/lib/dashboard-auth";
+import { decodeEmailSnippet, normalizeEmailText } from "@/lib/email-text";
 import { prisma } from "@/lib/prisma";
 import { sanitizeEmailHtml } from "@/lib/sanitize-email-html";
 
 export const runtime = "nodejs";
-
-function normalizeEmailText(value: string): string {
-  return decodeHTML(value)
-    .replace(/\r\n?/g, "\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n[ \t]+/g, "\n")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
 
 export async function GET(
   request: NextRequest,
@@ -50,6 +40,7 @@ export async function GET(
     return NextResponse.json({
       email: {
         ...email,
+        snippet: decodeEmailSnippet(email.snippet),
         bodyText: normalizeEmailText(email.bodyText),
         bodyHtml: email.bodyHtml ? sanitizeEmailHtml(email.bodyHtml) : null,
       },
