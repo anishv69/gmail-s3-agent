@@ -2,7 +2,7 @@ import sanitizeHtml from "sanitize-html";
 
 export function sanitizeEmailHtml(value: string): string {
   // First pass: normalize the HTML to collapse excessive whitespace between inline elements
-  let normalized = value
+  const normalized = value
     // Remove newlines and extra spaces between closing and opening tags
     .replace(/>\s+</g, "><")
     // Collapse multiple spaces within text to single space

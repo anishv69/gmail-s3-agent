@@ -6,13 +6,13 @@ async function run(){
   const bucket = getS3Bucket();
   try{
     // Head bucket
-    try{ await s3.send(new HeadBucketCommand({ Bucket: bucket })); console.log('headBucket: ok'); }catch(e:any){ console.error('headBucket_error', e.name || e.Code || e.message); }
+    try{ await s3.send(new HeadBucketCommand({ Bucket: bucket })); console.log('headBucket: ok'); }catch(e:unknown){ const err = e as { name?: string; Code?: string; message?: string }; console.error('headBucket_error', err.name || err.Code || err.message); }
 
     // get ACL
-    try{ const acl = await s3.send(new GetBucketAclCommand({ Bucket: bucket })); console.log('getBucketAcl: ok', { grants: (acl.Grants||[]).length, owner: !!acl.Owner }); }catch(e:any){ console.error('getBucketAcl_error', e.name || e.Code || e.message); }
+    try{ const acl = await s3.send(new GetBucketAclCommand({ Bucket: bucket })); console.log('getBucketAcl: ok', { grants: (acl.Grants||[]).length, owner: !!acl.Owner }); }catch(e:unknown){ const err = e as { name?: string; Code?: string; message?: string }; console.error('getBucketAcl_error', err.name || err.Code || err.message); }
 
     // get policy
-    try{ const policy = await s3.send(new GetBucketPolicyCommand({ Bucket: bucket })); console.log('getBucketPolicy: ok (policy length)', policy.Policy?.length || 0); }catch(e:any){ console.error('getBucketPolicy_error', e.name || e.Code || e.message); }
+    try{ const policy = await s3.send(new GetBucketPolicyCommand({ Bucket: bucket })); console.log('getBucketPolicy: ok (policy length)', policy.Policy?.length || 0); }catch(e:unknown){ const err = e as { name?: string; Code?: string; message?: string }; console.error('getBucketPolicy_error', err.name || err.Code || err.message); }
   }finally{ s3.destroy(); }
 }
 run().catch(e=>{ console.error('fatal', e); process.exitCode=1 });
