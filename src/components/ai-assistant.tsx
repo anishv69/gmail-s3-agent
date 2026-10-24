@@ -11,6 +11,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { streamAiAnswer } from "@/lib/ai/stream-client";
 
 type Source = {
   citation: string;
@@ -25,6 +26,7 @@ type Source = {
 };
 
 type Message = {
+  id: string;
   role: "user" | "assistant";
   content: string;
   sources?: Source[];
@@ -120,34 +122,51 @@ export function AiAssistant() {
     event.preventDefault();
     const value = question.trim();
     if (!value || asking) return;
-    setMessages((current) => [...current, { role: "user", content: value }]);
+
+    // Send recent turns (prior to this question) so follow-up questions
+    // are understood in context.
+    const historyForRequest = messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
+    const assistantId = `${Date.now()}-assistant`;
+
+    setMessages((current) => [
+      ...current,
+      { id: `${Date.now()}-user`, role: "user", content: value },
+      { id: assistantId, role: "assistant", content: "" },
+    ]);
     setQuestion("");
     setAsking(true);
     setAnswerError("");
-    try {
-      const result = await readJson<{ answer: string; sources: Source[] }>(
-        await fetch("/api/ai/ask", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({
-            question: value,
-            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-            // Send recent turns (prior to this question) so follow-up
-            // questions are understood in context.
-            history: messages.slice(-10).map((m) => ({ role: m.role, content: m.content })),
-          }),
-        }),
-      );
-      setMessages((current) => [
-        ...current,
-        { role: "assistant", content: result.answer, sources: result.sources },
-      ]);
-    } catch (error) {
-      setAnswerError(error instanceof Error ? error.message : "Unable to answer the question.");
-    } finally {
-      setAsking(false);
-    }
+
+    let receivedFirstToken = false;
+    await streamAiAnswer({
+      question: value,
+      history: historyForRequest,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      onToken: (text) => {
+        if (!receivedFirstToken) {
+          receivedFirstToken = true;
+          setAsking(false);
+        }
+        setMessages((current) =>
+          current.map((m) => (m.id === assistantId ? { ...m, content: m.content + text } : m)),
+        );
+      },
+      onDone: ({ answer, sources }) => {
+        setAsking(false);
+        setMessages((current) =>
+          current.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: answer || m.content || "Unable to generate an answer.", sources }
+              : m,
+          ),
+        );
+      },
+      onError: (message) => {
+        setAsking(false);
+        setAnswerError(message);
+        setMessages((current) => current.filter((m) => m.id !== assistantId));
+      },
+    });
   }
 
   async function indexDocuments() {
@@ -314,9 +333,11 @@ export function AiAssistant() {
             </div>
           ) : (
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-              {messages.map((message, index) => (
+              {messages
+                .filter((message) => message.content !== "" || message.role === "user")
+                .map((message) => (
                 <article
-                  key={`${message.role}-${index}`}
+                  key={message.id}
                   className={`max-w-[92%] rounded-2xl px-4 py-3 sm:max-w-[85%] ${
                     message.role === "user"
                       ? "ml-auto bg-indigo-600 text-white"

@@ -2,6 +2,7 @@ import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Prisma } from "@prisma/client";
 import { google, gmail_v1 } from "googleapis";
 import { prisma } from "@/lib/prisma";
+import { processAutomaticReply } from "@/lib/auto-reply-automation";
 
 const SYNC_STATE_KEY = "gmail:last-synced-at";
 const SYNC_STATUS_KEY = "gmail:sync-status";
@@ -494,7 +495,12 @@ async function processMessage(
   bucket: string,
   gmailMessageId: string,
   maxAttachmentBytes: number,
-): Promise<{ processed: boolean; attachmentCount: number }> {
+): Promise<{
+  processed: boolean;
+  attachmentCount: number;
+  emailId?: string;
+  receivedAt?: Date;
+}> {
   const existing = await prisma.email.findUnique({
     where: { gmailMessageId },
     select: { id: true, gmailLabels: true, receivedAt: true },
@@ -558,7 +564,7 @@ async function processMessage(
   const bodyHtml = htmlText.join("\n").trim() || null;
 
   try {
-    await prisma.email.create({
+    const savedEmail = await prisma.email.create({
       data: {
         gmailMessageId: message.id,
         gmailThreadId: message.threadId,
@@ -581,6 +587,12 @@ async function processMessage(
         },
       },
     });
+    return {
+      processed: true,
+      attachmentCount: attachments.length,
+      emailId: savedEmail.id,
+      receivedAt: savedEmail.receivedAt,
+    };
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -591,7 +603,6 @@ async function processMessage(
     throw error;
   }
 
-  return { processed: true, attachmentCount: attachments.length };
 }
 
 async function pollInboxOnce(): Promise<PollSummary> {
@@ -658,6 +669,23 @@ async function pollInboxOnce(): Promise<PollSummary> {
       if (result.processed) {
         summary.processedMessages += 1;
         summary.uploadedAttachments += result.attachmentCount;
+        // Do not auto-reply to the initial inbox backfill or messages already
+        // present at the last checkpoint; automation applies to newly received mail.
+        if (
+          result.emailId &&
+          result.receivedAt &&
+          savedState &&
+          result.receivedAt.getTime() > lastSyncedAt.getTime()
+        ) {
+          try {
+            await processAutomaticReply(result.emailId);
+          } catch (error) {
+            console.error("[auto-reply] automatic_reply_generation_failed", {
+              emailId: result.emailId,
+              error: error instanceof Error ? error.message : "Unknown error",
+            });
+          }
+        }
       } else {
         summary.skippedMessages += 1;
       }

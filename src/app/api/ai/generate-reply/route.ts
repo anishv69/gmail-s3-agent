@@ -30,17 +30,19 @@ export async function POST(request: NextRequest) {
       });
 
       if (settings) {
+        const shouldAutoSend =
+          settings.autoSendToKnown && generatedReply.shouldAutoSend === true;
         autoReply = await prisma.autoReply.create({
           data: {
             emailId,
             settingsId: settings.id,
             originalFrom: from,
-            originalTo: process.env.GMAIL_USER_EMAIL || "user@gmail.com",
+            originalTo: process.env.GMAIL_USER_EMAIL || "",
             originalSubject: subject,
             generatedReply: generatedReply.reply,
             confidence: generatedReply.confidence,
-            shouldAutoSend: generatedReply.shouldAutoSend,
-            status: generatedReply.shouldAutoSend ? "pending_send" : "draft",
+            shouldAutoSend,
+            status: shouldAutoSend ? "pending_send" : "draft",
           },
         });
       }

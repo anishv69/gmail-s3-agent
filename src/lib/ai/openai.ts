@@ -2,6 +2,8 @@ import OpenAI from "openai";
 
 export const EMBEDDING_MODEL = "text-embedding-3-small";
 export const CHAT_MODEL = process.env.AI_CHAT_MODEL || "gpt-4.1-mini";
+export const ASSISTANT_MODEL =
+  process.env.AI_ASSISTANT_MODEL || process.env.AI_CHAT_MODEL || "gpt-6.1-sol";
 export const EMBEDDING_DIMENSIONS = 1536;
 
 let client: OpenAI | undefined;
@@ -11,7 +13,7 @@ export function getOpenAiClient(): OpenAI {
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not configured on the server.");
   }
-  client ??= new OpenAI({ apiKey, timeout: 25_000, maxRetries: 0 });
+  client ??= new OpenAI({ apiKey, timeout: 60_000, maxRetries: 1 });
   return client;
 }
 

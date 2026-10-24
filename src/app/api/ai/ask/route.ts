@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { answerQuestion } from "@/lib/ai/answer";
+import { streamAnswerQuestion } from "@/lib/ai/answer";
 import type { ConversationTurn } from "@/lib/ai/answer";
 import { hasDashboardAuthorization } from "@/lib/dashboard-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const MAX_HISTORY_MESSAGES = 10;
 const MAX_HISTORY_MESSAGE_LENGTH = 1200;
@@ -88,36 +88,66 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json({ error: "Provide a valid IANA time zone." }, { status: 400 });
     }
-    const result = await answerQuestion(question, timeZone, history);
-    console.log(`[AI] Answer generated for: "${question}"`);
-    console.log(`[AI] Response: ${result.answer.substring(0, 100)}...`);
-    console.log(`[AI] Sources count: ${result.sources.length}`);
-    result.sources.forEach((source, idx) => {
-      console.log(`[AI] Source ${idx + 1}: ${source.title || "untitled"} from ${source.sender || "unknown"} at ${source.receivedAt || "no date"}`);
+
+    // Stream the answer back as newline-delimited JSON events so the UI can
+    // render tokens as they're generated instead of waiting for the full
+    // response: {"type":"token","value":"..."} for each chunk, then a final
+    // {"type":"done","answer":"...","sources":[...]} with the authoritative
+    // text, or {"type":"error","message":"..."} if generation fails.
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const enqueueLine = (payload: unknown) => {
+          controller.enqueue(encoder.encode(`${JSON.stringify(payload)}\n`));
+        };
+        try {
+          const result = await streamAnswerQuestion(
+            question,
+            (text) => enqueueLine({ type: "token", value: text }),
+            timeZone,
+            history,
+          );
+          console.info("[ai-answer] request_succeeded", {
+            answerCharacters: result.answer.length,
+            sourceCount: result.sources.length,
+          });
+          enqueueLine({ type: "done", answer: result.answer, sources: result.sources });
+        } catch (error) {
+          const name = error instanceof Error ? error.name : "UnknownError";
+          const message = error instanceof Error ? error.message : "";
+          console.error("[ai-answer] request_failed", {
+            errorType: name,
+            category: /rate.?limit|429/i.test(message)
+              ? "provider_rate_limited"
+              : /timeout|timed out/i.test(message)
+                ? "provider_timeout"
+                : "answer_generation_failed",
+          });
+          const userMessage = /rate.?limit|429/i.test(message)
+            ? "The AI provider is rate-limiting requests. Please try again shortly."
+            : "Unable to generate an answer. Check server configuration and try again.";
+          enqueueLine({ type: "error", message: userMessage });
+        } finally {
+          controller.close();
+        }
+      },
     });
-    return NextResponse.json(result, {
-      headers: { "Cache-Control": "private, no-store" },
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "private, no-store",
+      },
     });
   } catch (error) {
     const name = error instanceof Error ? error.name : "UnknownError";
-    const message = error instanceof Error ? error.message : "";
     console.error("[ai-answer] request_failed", {
       errorType: name,
-      category: /rate.?limit|429/i.test(message)
-        ? "provider_rate_limited"
-        : /timeout|timed out/i.test(message)
-          ? "provider_timeout"
-          : "answer_generation_failed",
+      category: "answer_generation_failed",
     });
-    const status = /rate.?limit|429/i.test(message) ? 429 : 502;
     return NextResponse.json(
-      {
-        error:
-          status === 429
-            ? "The AI provider is rate-limiting requests. Please try again shortly."
-            : "Unable to generate an answer. Check server configuration and try again.",
-      },
-      { status },
+      { error: "Unable to generate an answer. Check server configuration and try again." },
+      { status: 502 },
     );
   }
 

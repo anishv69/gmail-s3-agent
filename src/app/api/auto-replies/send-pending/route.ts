@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendEmailViaGmail } from "@/lib/gmail-send";
+import { AUTO_SEND_CONFIDENCE_THRESHOLD } from "@/lib/ai/auto-reply";
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     // Get auto-reply settings
     const settings = await prisma.autoReplySettings.findFirst({
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: false,
         message: "Auto-send is not enabled in settings",
-      });
+      }, { status: 400 });
     }
 
     // Get all pending auto-replies
@@ -21,6 +22,8 @@ export async function POST(request: NextRequest) {
       where: {
         status: "pending_send",
         settingsId: settings.id,
+        shouldAutoSend: true,
+        confidence: { gte: AUTO_SEND_CONFIDENCE_THRESHOLD },
       },
     });
 
@@ -32,6 +35,12 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const originalEmails = await prisma.email.findMany({
+      where: { id: { in: pendingReplies.map((reply) => reply.emailId) } },
+      select: { id: true, gmailMessageId: true, gmailThreadId: true },
+    });
+    const originalEmailById = new Map(originalEmails.map((email) => [email.id, email]));
+
     let sentCount = 0;
     const errors: string[] = [];
 
@@ -40,7 +49,9 @@ export async function POST(request: NextRequest) {
       try {
         // Check if sender is in exclude list
         if (
-          settings.excludeSenders.includes(reply.originalFrom.toLowerCase())
+          settings.excludeSenders.some(
+            (sender) => sender.trim().toLowerCase() === reply.originalFrom.trim().toLowerCase(),
+          )
         ) {
           await prisma.autoReply.update({
             where: { id: reply.id },
@@ -62,11 +73,19 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
+        const originalEmail = originalEmailById.get(reply.emailId);
+        if (!originalEmail) {
+          errors.push(`Original email not found for reply ${reply.id}`);
+          continue;
+        }
+
         // Send the email via Gmail
         await sendEmailViaGmail({
           to: reply.originalFrom,
           subject: `Re: ${reply.originalSubject}`,
           body: reply.generatedReply,
+          threadId: originalEmail.gmailThreadId,
+          gmailMessageId: originalEmail.gmailMessageId,
         });
 
         // Update the status to sent
@@ -85,7 +104,10 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : "Unknown error";
         errors.push(`Failed to send reply ${reply.id}: ${errorMsg}`);
-        console.error(`[Auto-Reply] Failed to send reply ${reply.id}:`, error);
+        console.error("[auto-reply] pending_send_failed", {
+          replyId: reply.id,
+          error: errorMsg,
+        });
       }
     }
 

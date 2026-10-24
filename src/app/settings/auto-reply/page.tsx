@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Save, Plus, X } from "lucide-react";
 import Link from "next/link";
 
@@ -14,6 +14,49 @@ interface AutoReplySettings {
   excludeSubjects: string[];
 }
 
+function OnOffControl({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className="inline-flex shrink-0 rounded-lg border border-slate-200 bg-slate-100 p-1"
+    >
+      <button
+        type="button"
+        aria-pressed={value}
+        onClick={() => onChange(true)}
+        className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+          value
+            ? "bg-emerald-600 text-white shadow-sm"
+            : "text-slate-600 hover:text-slate-900"
+        }`}
+      >
+        On
+      </button>
+      <button
+        type="button"
+        aria-pressed={!value}
+        onClick={() => onChange(false)}
+        className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+          !value
+            ? "bg-slate-700 text-white shadow-sm"
+            : "text-slate-600 hover:text-slate-900"
+        }`}
+      >
+        Off
+      </button>
+    </div>
+  );
+}
+
 export default function AutoReplySettingsPage() {
   const [settings, setSettings] = useState<AutoReplySettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -21,11 +64,7 @@ export default function AutoReplySettingsPage() {
   const [newExcludeSender, setNewExcludeSender] = useState("");
   const [newExcludeSubject, setNewExcludeSubject] = useState("");
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  async function loadSettings() {
+  const loadSettings = useCallback(async () => {
     try {
       const response = await fetch("/api/settings/auto-reply");
       if (response.ok) {
@@ -37,7 +76,11 @@ export default function AutoReplySettingsPage() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    void Promise.resolve().then(loadSettings);
+  }, [loadSettings]);
 
   async function saveSettings() {
     if (!settings) return;
@@ -91,16 +134,19 @@ export default function AutoReplySettingsPage() {
       <h1 className="text-3xl font-bold mb-8">Auto-Reply Settings</h1>
 
       <div className="bg-white rounded-lg shadow p-6 space-y-6">
-        {/* Enable/Disable */}
-        <div className="flex items-center justify-between">
-          <label className="text-lg font-semibold">Enable Auto-Reply</label>
-          <input
-            type="checkbox"
-            checked={settings.enabled}
-            onChange={(e) =>
-              setSettings({ ...settings, enabled: e.target.checked })
-            }
-            className="w-5 h-5 cursor-pointer"
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 p-4">
+          <div>
+            <p className="text-base font-semibold text-slate-900">
+              Automatic reply generation
+            </p>
+            <p className="mt-1 max-w-md text-xs leading-5 text-slate-500">
+              When on, create replies for newly synced incoming mail. Existing inbox history is not processed automatically.
+            </p>
+          </div>
+          <OnOffControl
+            label="Automatic reply generation"
+            value={settings.enabled}
+            onChange={(enabled) => setSettings({ ...settings, enabled })}
           />
         </div>
 
@@ -116,7 +162,7 @@ export default function AutoReplySettingsPage() {
                 onChange={(e) =>
                   setSettings({
                     ...settings,
-                    responseTone: e.target.value as any,
+                    responseTone: e.target.value as AutoReplySettings["responseTone"],
                   })
                 }
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -147,23 +193,22 @@ export default function AutoReplySettingsPage() {
             </div>
 
             {/* Auto-send setting */}
-            <div>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.autoSendToKnown}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      autoSendToKnown: e.target.checked,
-                    })
-                  }
-                  className="w-4 h-4"
-                />
-                <span className="text-sm">
-                  Auto-send simple replies (draft complex ones for review)
-                </span>
-              </label>
+            <div className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-slate-200 p-4">
+              <div>
+                <p className="text-sm font-medium text-slate-900">
+                  Automatic email sending
+                </p>
+                <p className="mt-1 max-w-md text-xs leading-5 text-slate-500">
+                  Only replies marked very low-risk and at least 90% confident are sent. Other replies remain drafts for review.
+                </p>
+              </div>
+              <OnOffControl
+                label="Automatic email sending"
+                value={settings.autoSendToKnown}
+                onChange={(autoSendToKnown) =>
+                  setSettings({ ...settings, autoSendToKnown })
+                }
+              />
             </div>
 
             {/* Exclude Senders */}
@@ -297,6 +342,9 @@ export default function AutoReplySettingsPage() {
           <Save className="h-5 w-5" />
           {isSaving ? "Saving..." : "Save Settings"}
         </button>
+        <p className="text-center text-xs text-slate-500">
+          Changes to these On/Off controls are applied when you save settings.
+        </p>
       </div>
 
       {/* Info Section */}
@@ -304,8 +352,8 @@ export default function AutoReplySettingsPage() {
         <h3 className="font-semibold text-blue-900 mb-2">How it works:</h3>
         <ul className="text-sm text-blue-800 space-y-1">
           <li>• AI analyzes each incoming email to determine reply appropriateness</li>
-          <li>• Simple replies (acknowledgments, simple questions) are auto-sent</li>
-          <li>• Complex replies are saved as drafts for your review</li>
+          <li>• High-confidence, low-risk replies are sent automatically when the option above is enabled</li>
+          <li>• Uncertain or sensitive replies are saved as drafts for your review</li>
           <li>• Excluded senders and subjects will never get auto-replies</li>
           <li>• All replies are logged for your audit trail</li>
         </ul>

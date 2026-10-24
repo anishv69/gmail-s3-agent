@@ -2,19 +2,13 @@
 
 import { useState, useRef, useEffect } from "react";
 import { X, Send, Loader } from "lucide-react";
+import { streamAiAnswer, type StreamSource } from "@/lib/ai/stream-client";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  sources?: Array<{
-    citation: string;
-    sourceType: string;
-    title?: string;
-    sender?: string;
-    receivedAt?: string;
-    mimeType?: string;
-  }>;
+  sources?: StreamSource[];
 }
 
 interface ChatModalProps {
@@ -27,7 +21,6 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [conversationId, setConversationId] = useState<string>("");
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -36,12 +29,6 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
-
-  useEffect(() => {
-    if (isOpen && !conversationId) {
-      setConversationId(Math.random().toString(36).substring(7));
-    }
-  }, [isOpen, conversationId]);
 
   const handleSendMessage = async () => {
     if (!input.trim() || isLoading) return;
@@ -52,50 +39,56 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
       content: input,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    // Send recent turns so the assistant can understand follow-up
+    // questions ("what about her other email?") in context.
+    const historyForRequest = messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
+    const assistantId = (Date.now() + 1).toString();
+
+    setMessages((prev) => [...prev, userMessage, { id: assistantId, role: "assistant", content: "" }]);
     setInput("");
     setIsLoading(true);
 
-    try {
-      const response = await fetch("/api/ai/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question: input,
-          conversationId,
-          // Send recent turns so the assistant can understand follow-up
-          // questions ("what about her other email?") in context.
-          history: messages.slice(-10).map((m) => ({ role: m.role, content: m.content })),
-        }),
-      });
-
-      const data = await response.json();
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: data.answer || "Unable to generate an answer.",
-        sources: data.sources || [],
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error("Chat error:", error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "Sorry, I encountered an error. Please try again.",
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
+    let receivedFirstToken = false;
+    await streamAiAnswer({
+      question: input,
+      history: historyForRequest,
+      onToken: (text) => {
+        if (!receivedFirstToken) {
+          receivedFirstToken = true;
+          setIsLoading(false);
+        }
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + text } : m)),
+        );
+      },
+      onDone: ({ answer, sources }) => {
+        setIsLoading(false);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: answer || m.content || "Unable to generate an answer.", sources }
+              : m,
+          ),
+        );
+      },
+      onError: (message) => {
+        console.error("Chat error:", message);
+        setIsLoading(false);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: m.content || `Sorry, I encountered an error: ${message}` }
+              : m,
+          ),
+        );
+      },
+    });
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed bottom-24 right-8 z-50 w-96 max-h-96 bg-white rounded-2xl shadow-2xl shadow-slate-900/20 border border-slate-200 overflow-hidden flex flex-col">
+    <div className="fixed bottom-36 right-8 z-50 w-96 max-h-96 bg-white rounded-2xl shadow-2xl shadow-slate-900/20 border border-slate-200 overflow-hidden flex flex-col">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-3 flex items-center justify-between">
         <h3 className="font-semibold text-sm">Chat Assistant</h3>
@@ -115,7 +108,9 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
             <p className="font-medium">Ask me anything about your emails & documents</p>
           </div>
         ) : (
-          messages.map((message) => (
+          messages
+            .filter((message) => message.content !== "" || message.role === "user")
+            .map((message) => (
             <div
               key={message.id}
               className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}

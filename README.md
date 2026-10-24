@@ -44,8 +44,9 @@ your local `.env` file.
      **Internal** only if this is a Google Workspace organization and the
      account belongs to it). If the app is in **Testing**, add
      `varma5dev@gmail.com` as a test user.
-   - Under **Data Access**, add the scope
-     `https://www.googleapis.com/auth/gmail.readonly`.
+   - Under **Data Access**, add both scopes:
+     `https://www.googleapis.com/auth/gmail.readonly` and
+     `https://www.googleapis.com/auth/gmail.send`.
 4. Under **Google Auth Platform → Clients**, choose **Create client** and
    select **Web application**.
    - Give it a recognizable name such as `Gmail S3 Agent Local`.
@@ -62,16 +63,21 @@ your local `.env` file.
    - Enable **Use your own OAuth credentials**.
    - Enter the client ID and client secret from the previous section.
    - Close settings.
-3. In the scope input, enter
-   `https://www.googleapis.com/auth/gmail.readonly`, then click **Authorize
-   APIs**.
+3. In the scope input, enter both scopes separated by a space, then click
+   **Authorize APIs**:
+   `https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send`
 4. Sign in as **`varma5dev@gmail.com`** and review/allow the requested
-   read-only Gmail access. Google may display an unverified-app warning while
-   the app is in Testing; proceed only if the project and scope are the ones
-   you configured.
+   Gmail access to read messages and send replies. Google may display an
+   unverified-app warning while the app is in Testing; proceed only if the
+   project and scopes are the ones you configured.
 5. Click **Exchange authorization code for tokens**. Copy the **refresh
    token** from the response directly into `GOOGLE_REFRESH_TOKEN` in your
    local `.env`. Do not paste it into chat, a ticket, or a source file.
+
+The app's existing refresh token must be reissued after adding `gmail.send`;
+editing the Cloud Console scope list alone does not add permission to an
+existing token. `gmail.send` is a sensitive Gmail scope. Google describes it
+as permission to send email on the account owner's behalf.
 
 For a personal Gmail account, an External app left in **Testing** can issue
 refresh tokens that expire after seven days when using Gmail scopes. For
@@ -149,14 +155,17 @@ where `npm run dev` is running, then confirm the Gmail API is enabled, the
 account is a test user if needed, and the OAuth values are correct. Never copy
 the refresh token or client secret into the terminal output or chat.
 
-The server logs only a safe diagnostic category and Google HTTP status, never
-credential values. If the category is `oauth_client_not_authorized` with
+The server logs a safe Gmail error and HTTP status, never credential values
+or message content. If sending reports a missing `gmail.send` permission,
+repeat the OAuth Playground flow above with both Gmail scopes and replace
+`GOOGLE_REFRESH_TOKEN` with the new refresh token. If the category is
+`oauth_client_not_authorized` with
 Google HTTP 401 (`unauthorized_client`), Google rejected the refresh-token
 grant before a Gmail API request was made. In Google OAuth Playground, enable
 **Use your own OAuth credentials** and verify it uses the exact current Web
 application client ID and secret configured in `.env`. Confirm the Gmail
 account is a test user while the consent screen is in Testing, authorize the
-`gmail.readonly` scope again, exchange the code for a new refresh token, and
+both Gmail scopes, exchange the code for a new refresh token, and
 replace `GOOGLE_REFRESH_TOKEN` locally. Restart `npm run dev` and retry the
 Gmail check. If the client secret was exposed, rotate it in Google Cloud first,
 then use the new secret consistently in `.env` and OAuth Playground when

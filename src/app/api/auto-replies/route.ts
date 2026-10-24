@@ -1,19 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { AUTO_SEND_CONFIDENCE_THRESHOLD } from "@/lib/ai/auto-reply";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "25");
     const status = searchParams.get("status");
     const search = searchParams.get("search");
-    
+    const requestedPage = Number.parseInt(searchParams.get("page") || "1", 10);
+    const requestedLimit = Number.parseInt(searchParams.get("limit") || "25", 10);
+    const page = Number.isFinite(requestedPage) ? Math.max(1, requestedPage) : 1;
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(100, Math.max(1, requestedLimit))
+      : 25;
     const skip = (page - 1) * limit;
 
     // Build where clause
-    const where: any = {};
-    if (status) where.status = status;
+    const where: Prisma.AutoReplyWhereInput = {};
+    if (status && ["draft", "sent", "pending_send", "skipped"].includes(status)) {
+      where.status = status;
+    }
     if (search) {
       where.OR = [
         { originalFrom: { contains: search, mode: "insensitive" } },
@@ -28,9 +35,7 @@ export async function GET(request: NextRequest) {
     // Get paginated replies with email data, ordered by email receivedAt (latest first)
     const replies = await prisma.autoReply.findMany({
       where,
-      include: {
-        settings: true,
-      },
+      orderBy: { createdAt: "desc" },
       take: limit,
       skip: skip,
     });
@@ -52,8 +57,24 @@ export async function GET(request: NextRequest) {
       return emailB.receivedAt.getTime() - emailA.receivedAt.getTime();
     });
 
+    const activeSettings = await prisma.autoReplySettings.findFirst({
+      where: { enabled: true, autoSendToKnown: true },
+      select: { id: true },
+    });
+    const pendingSendCount = activeSettings
+      ? await prisma.autoReply.count({
+          where: {
+            settingsId: activeSettings.id,
+            status: "pending_send",
+            shouldAutoSend: true,
+            confidence: { gte: AUTO_SEND_CONFIDENCE_THRESHOLD },
+          },
+        })
+      : 0;
+
     return NextResponse.json({
       data: sortedReplies,
+      pendingSendCount,
       pagination: {
         page,
         limit,

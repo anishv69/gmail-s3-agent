@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Send, Trash2, Edit2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
@@ -11,6 +11,7 @@ interface AutoReply {
   originalSubject: string;
   generatedReply: string;
   status: "draft" | "sent" | "pending_send" | "skipped";
+  shouldAutoSend: boolean;
   confidence: number;
   createdAt: string;
   sentAt: string | null;
@@ -31,13 +32,10 @@ export default function AutoRepliesPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [pendingSendCount, setPendingSendCount] = useState(0);
   const pageSize = 25;
 
-  useEffect(() => {
-    loadReplies(1);
-  }, [filter, searchTerm]);
-
-  async function loadReplies(pageNum: number) {
+  const loadReplies = useCallback(async (pageNum: number) => {
     try {
       const params = new URLSearchParams({
         page: pageNum.toString(),
@@ -52,6 +50,7 @@ export default function AutoRepliesPage() {
         setReplies(data.data);
         setTotal(data.pagination.total);
         setTotalPages(data.pagination.totalPages);
+        setPendingSendCount(data.pendingSendCount ?? 0);
         setPage(pageNum);
       }
     } catch (error) {
@@ -59,9 +58,16 @@ export default function AutoRepliesPage() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [filter, searchTerm]);
+
+  useEffect(() => {
+    void Promise.resolve().then(() => loadReplies(1));
+  }, [loadReplies]);
 
   async function sendReply(id: string, replyText: string) {
+    if (!replyText.trim()) return;
+    if (!confirm("Send this reply to the original sender now?")) return;
+
     try {
       const response = await fetch(`/api/auto-replies/${id}/send`, {
         method: "POST",
@@ -76,14 +82,19 @@ export default function AutoRepliesPage() {
           )
         );
         setEditingId(null);
+      } else {
+        const result = await response.json().catch(() => ({}));
+        alert(result.error || "Unable to send this reply.");
       }
     } catch (error) {
       console.error("Failed to send reply:", error);
+      alert(error instanceof Error ? error.message : "Unable to send this reply.");
     }
   }
 
   async function sendAllPending() {
-    if (!confirm("Send all pending auto-replies?")) return;
+    if (pendingSendCount === 0) return;
+    if (!confirm(`Send ${pendingSendCount} eligible auto-replies now?`)) return;
     
     setSendingAll(true);
     try {
@@ -96,7 +107,14 @@ export default function AutoRepliesPage() {
         const result = await response.json();
         // Reload replies to get updated statuses
         await loadReplies(1);
-        alert(`Successfully sent ${result.sent} replies!`);
+        if (result.errors?.length) {
+          alert(`Sent ${result.sent} replies. ${result.errors.length} could not be sent. First error: ${result.errors[0]}`);
+        } else {
+          alert(`Successfully sent ${result.sent} replies!`);
+        }
+      } else {
+        const result = await response.json();
+        alert(result.message || result.error || "Failed to send eligible replies");
       }
     } catch (error) {
       console.error("Failed to send pending replies:", error);
@@ -111,6 +129,7 @@ export default function AutoRepliesPage() {
 
     setGeneratingBatch(true);
     let totalGenerated = 0;
+    let totalSkipped = 0;
     try {
       // The endpoint only processes a bounded batch per call (so each
       // request stays fast). Keep calling it until no emails remain.
@@ -128,16 +147,23 @@ export default function AutoRepliesPage() {
 
         const result = await response.json();
         totalGenerated += result.generated;
-        setGenerateProgress({ done: totalGenerated, remaining: result.remaining ?? 0 });
+        totalSkipped += result.skipped ?? 0;
+        setGenerateProgress({ done: totalGenerated + totalSkipped, remaining: result.remaining ?? 0 });
 
         // Refresh the list as we go so the user sees progress.
         await loadReplies(1);
 
         if (!result.remaining || result.remaining <= 0) break;
+        if (result.errors?.length || result.generated + (result.skipped ?? 0) === 0) {
+          alert("Generation paused because some emails could not be processed. Check the server log, then try again.");
+          break;
+        }
       }
 
       if (totalGenerated > 0) {
-        alert(`Generated ${totalGenerated} new auto-replies!`);
+        alert(`Generated ${totalGenerated} replies; skipped ${totalSkipped} excluded emails.`);
+      } else if (totalSkipped > 0) {
+        alert(`No replies generated; skipped ${totalSkipped} excluded emails.`);
       } else {
         alert("No new auto-replies were generated.");
       }
@@ -195,10 +221,10 @@ export default function AutoRepliesPage() {
         <div className="flex gap-3">
           <button
             onClick={sendAllPending}
-            disabled={sendingAll || replies.filter(r => r.status === 'pending_send').length === 0}
+            disabled={sendingAll || pendingSendCount === 0}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {sendingAll ? "Sending..." : `Send All Pending (${replies.filter(r => r.status === 'pending_send').length})`}
+            {sendingAll ? "Sending..." : `Send Eligible (${pendingSendCount})`}
           </button>
           <button
             onClick={generateBatchReplies}
@@ -234,7 +260,7 @@ export default function AutoRepliesPage() {
           {["all", "draft", "pending_send", "sent"].map((tab) => (
             <button
               key={tab}
-              onClick={() => setFilter(tab as any)}
+              onClick={() => setFilter(tab as "all" | "draft" | "sent" | "pending_send")}
               className={`px-4 py-2 rounded-lg font-medium transition ${
                 filter === tab
                   ? "bg-blue-600 text-white"
@@ -280,7 +306,11 @@ export default function AutoRepliesPage() {
                       statusColors[reply.status]
                     }`}
                   >
-                    {reply.status === "pending_send" ? "Pending" : reply.status}
+                    {reply.status === "pending_send" && !reply.shouldAutoSend
+                      ? "Needs review"
+                      : reply.status === "pending_send"
+                        ? "Eligible to send"
+                        : reply.status}
                   </span>
                   <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded whitespace-nowrap">
                     {(reply.confidence * 100).toFixed(0)}%
@@ -296,6 +326,10 @@ export default function AutoRepliesPage() {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm mb-4"
                   rows={4}
                 />
+              ) : reply.status === "skipped" ? (
+                <div className="bg-slate-50 px-4 py-3 rounded-lg mb-4 border border-slate-200 text-sm text-slate-500">
+                  No reply was generated because this email matches an exclusion rule.
+                </div>
               ) : (
                 <div className="bg-slate-50 px-4 py-3 rounded-lg mb-4 border border-slate-200">
                   <p className="text-sm text-slate-700 leading-relaxed">
